@@ -1,0 +1,168 @@
+;Copyright 1982 Infocom, Inc.  All rights reserved.
+
+;Configuration Program for INTERLOGIC(tm) CP/M Files
+
+;Configured for Xterm
+
+;This program should be edited to specify terminal and
+;printer parameters for your CP/M system.  Edit this
+;file, then assemble, load, and run the program.
+;Complete documentation of the setup procedure will
+;be found in your INTERLOGIC Reference Card.
+
+;Terminal and printer specific parameters start at
+;the label CPMCPL, about 20 lines below.  Nothing
+;prior to that label should be altered.
+
+;Some code was stolen from Tony Nicholson.
+	
+
+	.z80
+
+ASEG
+ORG	100H
+
+LPDL	EQU 100H
+BDOS	EQU 05H
+FCB1	EQU 05CH
+FCB1FN	EQU FCB1+1
+
+PCHAR	EQU 2
+PSTRNG	EQU 9
+OPEN	EQU 15
+CLOSE	EQU 16
+WRITES	EQU 21
+SETDMA	EQU 26
+
+cmdtail	EQU	0080h		; CCP command tail
+	
+START:	JP CPMSTR
+
+;Setup parameters begin here.  Refer to the INTERLOGIC
+;Reference Card for CP/M for complete documentation for
+;editing this file.
+
+CPMCPL: DB 80		;Characters/line (132 maximum)
+CPMLPP: DB 23		;Lines/screen (NOT including status line)
+CPMFN:	DS 8		;File name
+CPMCLF: DB 1		;1 if LF should print after CR on screen
+CPMLLF: DB 1		;1 if LF should print after CR on printer
+CPMINV: DB 0		;Number to add to ASCII value of characters
+			;to have them print in inverse video.
+			;This is not applicable on many terminals.
+
+;The following strings have a count field followed by up
+;to 32 characters.
+
+TINIT:	DB 18		;Initialize the terminal.  
+			;Should position the cursor at the
+			;lower left corner of the screen.
+			;On terminals with the facility, a
+			;scrolling region should be established
+			;to include all but the top line on
+			;the screen.  Also, clearing the screen
+			;is desirable.
+
+	DB 27,'[2J'	;Erase the while screen
+	DB 27,'[2;24r'  ;Set scrolling region lines 2-24
+	DB 27,'[24;1H'  ;Cursor to row 24, col 1
+
+        DS 32-$+TINIT+1
+TRESET: DB 10		;Reset the terminal at end of game.
+			;For example, if a scrolling region
+			;was established, reset it to include the
+			;entire screen.  Clearing the screen is
+			;NOT desirable.			
+
+	DB 27,'[r'	;Reset the scroll region (also moves the cursor)
+	DB 27,'[24;1H'  ;Cursor to row 24, col 1
+	
+	DS 32-$+TRESET+1
+BLINE:  DB 7		;Begin status line.
+			;Should move the cursor to the upper
+			;left corner of the screen.  If at all
+			;possible, should go into inverse video.
+	DB 27,'[H'	;Cursor to row 1, col 1
+	DB 27,'[7m'	;Inverse video
+	
+	DS 32-$+BLINE+1
+ELINE:  DB 10		;End status line.
+			;Should move the cursor to the lower
+			;left corner of the screen.  If status
+			;line uses inverse video, this state
+			;should be cleared.
+	
+	DB 27,'[m'	;Normal video
+	DB 27,'[24;1H'  ;Cursor to row 24, col 1
+	
+	DS 32-$+ELINE+1	
+PINIT:  DB 0		;Printer initialization.
+			;If any setup is required prior to
+			;using scripting.
+
+	DS 200H-$
+
+;The setup parameters end at this point.  Nothing below this point
+;should be changed for any reason.
+
+CPMSTR: LD SP,PDL+LPDL
+
+        ld	de, CPMFN            ;copy game specific filename into 
+        ld	hl, FCB1FN           ;place
+        ld	bc, 8
+        ldir
+
+	LD C,OPEN		;open file
+	LD DE,FCB1
+	CALL BDOS
+	INC A
+	LD DE,BADOPN
+	JR Z,FINIS
+
+	LD DE,100H		;overwrite first two
+	CALL WRITEB		;  sectors containing new
+	LD DE,180H		;  configuration
+	CALL WRITEB
+
+	LD C,CLOSE
+	LD DE,FCB1
+	CALL BDOS
+	INC A
+	LD DE,BADCLS
+	JR Z,FINIS
+	LD DE,OK
+FINIS:	LD C,PSTRNG
+	CALL BDOS
+	RST 0
+
+;;
+;; WRITEB writes 128 bytes pointed at by DE to the currently open 
+;; file.
+;; On a write error it closes the file and exits the program 
+;; displaying an  error message
+;;
+WRITEB: LD C,SETDMA
+	CALL BDOS
+	LD C,WRITES
+	LD DE,FCB1
+	CALL BDOS
+	OR A
+	RET Z
+	LD C,CLOSE
+	LD DE,FCB1
+	CALL BDOS
+	LD DE,BADWRT
+	JR FINIS
+
+BADOPN: DB 0DH,0AH,'CAN NOT OPEN FILE$'
+
+BADCLS: DB 0DH,0AH,'ERROR ON FILE CLOSE$'
+
+BADWRT: DB 0DH,0AH,'WRITE ERROR$'
+
+OK:	DB 0DH,0AH,'CONFIGURATION PROGRAM FINISHED',0DH,0AH,'$'
+
+PDL:	DS LPDL
+
+
+END START
